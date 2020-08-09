@@ -76,6 +76,7 @@
 
 #define SMS_SENT 1
 #define SMS_RECEIVED 2
+#define SMS_LIST 3
 
 #define MAX_NUMBER_LEN 16
 #define MAX_CALLS_MISSED 15
@@ -296,8 +297,13 @@ void modcellular_notify_ntwlist(API_Event_t* event) {
 void modcellular_notify_sms_list(API_Event_t* event) {
     SMS_Message_Info_t* messageInfo = (SMS_Message_Info_t*)event->pParam1;
 
+    mp_obj_t sms = modcellular_sms_from_record(messageInfo);
+
+    if (sms_callback && sms_callback != mp_const_none)
+        mp_sched_schedule(sms_callback, mp_obj_new_int(SMS_LIST), sms);
+
     if (sms_list_buffer && (sms_list_buffer->len > sms_list_buffer_count)) {
-        sms_list_buffer->items[sms_list_buffer_count] = modcellular_sms_from_record(messageInfo);
+        sms_list_buffer->items[sms_list_buffer_count] = sms;
         sms_list_buffer_count ++;
     } else {
         network_exception = NTW_EXC_SMS_DROP;
@@ -316,8 +322,16 @@ void modcellular_notify_sms_error(API_Event_t* event) {
 }
 
 void modcellular_notify_sms_receipt(API_Event_t* event) {
-    if (sms_callback && sms_callback != mp_const_none)
-        mp_sched_schedule(sms_callback, mp_obj_new_int(SMS_RECEIVED));
+    if (sms_callback && sms_callback != mp_const_none) {
+        SMS_Encode_Type_t encodeType = pEvent->param1;
+        uint32_t contentLength = pEvent->param2;
+        uint8_t* header = pEvent->pParam1;
+        uint8_t* content = pEvent->pParam2;
+
+        mp_sched_schedule(sms_callback, mp_obj_new_int(SMS_RECEIVED),
+                                        mp_obj_new_str(header, strlen(header)),
+                                        mp_obj_new_str(content, contentLength));
+    }
 }
 
 // Signal level
@@ -526,13 +540,18 @@ STATIC mp_obj_t modcellular_sms_withdraw(mp_obj_t self_in) {
 
 MP_DEFINE_CONST_FUN_OBJ_1(modcellular_sms_withdraw_obj, &modcellular_sms_withdraw);
 
-STATIC mp_obj_t modcellular_sms_list(void) {
+STATIC mp_obj_t modcellular_sms_list(size_t n_args, const mp_obj_t *args) {
     // ========================================
     // Lists SMS messages.
     // Returns:
     //     A list of SMS messages.
     // ========================================
     REQUIRES_NETWORK_REGISTRATION;
+
+    mp_int_t timeout = TIMEOUT_SMS_LIST;
+
+    if (n_args == 2)
+        timeout = mp_obj_get_int(args[1]);
 
     SMS_Storage_Info_t storage;
     SMS_GetStorageInfo(&storage, SMS_STORAGE_SIM_CARD);
@@ -541,7 +560,7 @@ STATIC mp_obj_t modcellular_sms_list(void) {
     sms_list_buffer_count = 0;
 
     SMS_ListMessageRequst(SMS_STATUS_ALL, SMS_STORAGE_SIM_CARD);
-    WAIT_UNTIL(sms_list_buffer_count == storage.used, TIMEOUT_SMS_LIST, 100, mp_warning(NULL, "Failed to poll all SMS: the list may be incomplete"));
+    WAIT_UNTIL(sms_list_buffer_count == storage.used, timeout, 100, mp_warning(NULL, "Failed to poll all SMS: the list may be incomplete"));
 
     mp_obj_list_t *result = sms_list_buffer;
     sms_list_buffer = NULL;
