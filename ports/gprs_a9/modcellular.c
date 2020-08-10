@@ -113,6 +113,8 @@ uint8_t sms_list_buffer_count = 0;
 
 // SMS received
 mp_obj_t sms_callback = mp_const_none;
+mp_obj_t new_sms_callback = mp_const_none;
+
 
 // USSD received
 mp_obj_t ussd_callback = mp_const_none;
@@ -300,7 +302,7 @@ void modcellular_notify_sms_list(API_Event_t* event) {
     mp_obj_t sms = modcellular_sms_from_record(messageInfo);
 
     if (sms_callback && sms_callback != mp_const_none)
-        mp_sched_schedule(sms_callback, mp_obj_new_int(SMS_LIST), sms);
+        mp_sched_schedule(sms_callback, mp_obj_new_int(SMS_LIST));
 
     if (sms_list_buffer && (sms_list_buffer->len > sms_list_buffer_count)) {
         sms_list_buffer->items[sms_list_buffer_count] = sms;
@@ -323,14 +325,22 @@ void modcellular_notify_sms_error(API_Event_t* event) {
 
 void modcellular_notify_sms_receipt(API_Event_t* event) {
     if (sms_callback && sms_callback != mp_const_none) {
-        SMS_Encode_Type_t encodeType = pEvent->param1;
-        uint32_t contentLength = pEvent->param2;
-        uint8_t* header = pEvent->pParam1;
-        uint8_t* content = pEvent->pParam2;
+        mp_sched_schedule(sms_callback, mp_obj_new_int(SMS_RECEIVED));
+    }
 
-        mp_sched_schedule(sms_callback, mp_obj_new_int(SMS_RECEIVED),
-                                        mp_obj_new_str(header, strlen(header)),
-                                        mp_obj_new_str(content, contentLength));
+    if (new_sms_callback && new_sms_callback != mp_const_none) {
+        SMS_Encode_Type_t encodeType = event->param1;
+        uint32_t contentLength = event->param2;
+        const char * header = event->pParam1;
+        const char * content = event->pParam2;
+
+        mp_obj_t data[] = {
+            mp_obj_new_str(header, strlen(header)),
+            mp_obj_new_str(content, contentLength),
+        };
+
+        mp_obj_t this_heap = mp_obj_new_tuple(2, data);
+        mp_sched_schedule(new_sms_callback, this_heap);
     }
 }
 
@@ -1269,7 +1279,20 @@ STATIC mp_obj_t modcellular_on_sms(mp_obj_t callable) {
     return mp_const_none;
 }
 
+STATIC mp_obj_t modcellular_on_new_sms(mp_obj_t callable) {
+    // ========================================
+    // Sets a callback on SMS (receive).
+    // Args:
+    //     callback (Callable): a callback to
+    //     execute on SMS receive.
+    // ========================================
+    new_sms_callback = callable;
+    return mp_const_none;
+}
+
+
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(modcellular_on_sms_obj, modcellular_on_sms);
+STATIC MP_DEFINE_CONST_FUN_OBJ_1(modcellular_on_new_sms_obj, modcellular_on_new_sms);
 
 STATIC mp_obj_t modcellular_on_call(mp_obj_t callable) {
     // ========================================
@@ -1323,6 +1346,7 @@ STATIC const mp_map_elem_t mp_module_cellular_globals_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR_reset), (mp_obj_t)&modcellular_reset_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_on_status_event), (mp_obj_t)&modcellular_on_status_event_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_on_sms), (mp_obj_t)&modcellular_on_sms_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_on_sms), (mp_obj_t)&modcellular_on_new_sms_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_on_call), (mp_obj_t)&modcellular_on_call_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_on_ussd), (mp_obj_t)&modcellular_on_ussd_obj },
 
