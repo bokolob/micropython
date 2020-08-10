@@ -85,6 +85,11 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_1(modgps_on_update_obj, modgps_on_update);
 // Methods
 // -------
 
+#define USE_GPS 1
+#define USE_GLONASS 2
+#define USE_BEIDOU 4
+#define USE_GALILEO 8
+
 STATIC mp_obj_t modgps_on(size_t n_args, const mp_obj_t *arg) {
     // ========================================
     // Turns GPS on.
@@ -94,18 +99,32 @@ STATIC mp_obj_t modgps_on(size_t n_args, const mp_obj_t *arg) {
     //     ValueError if failed to turn GPS on.
     // ========================================
     uint32_t timeout = 0;
+    uint8_t search_mode = USE_GPS;
+
     if (n_args == 0) {
         timeout = DEFAULT_GPS_TIMEOUT;
-    } else {
-        timeout = mp_obj_get_int(arg[0]);
     }
+    else  {
+        timeout = mp_obj_get_int(arg[0]);
+
+        if (n_args == 2) {
+            search_mode = mp_obj_get_int(arg[1]);
+        }
+
+    }
+
     timeout *= 1000 * CLOCKS_PER_MSEC;
     gpsInfo = Gps_GetInfo();
     gpsInfo->rmc.latitude.value = 0;
     gpsInfo->rmc.longitude.value = 0;
     GPS_Init();
     GPS_Open(NULL);
+
+    GPS_SetSearchMode(!!(search_mode & USE_GPS), !!(search_mode & USE_GPS),
+                     !!(search_mode & USE_BEIDOU), !!(search_mode & USE_GALILEO));
+
     WAIT_UNTIL(gpsInfo->rmc.latitude.value, timeout, 100, mp_raise_OSError(MP_ETIMEDOUT));
+
     return mp_const_none;
 }
 

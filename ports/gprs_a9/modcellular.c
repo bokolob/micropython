@@ -329,10 +329,10 @@ void modcellular_notify_sms_receipt(API_Event_t* event) {
     }
 
     if (new_sms_callback && new_sms_callback != mp_const_none) {
-        SMS_Encode_Type_t encodeType = event->param1;
+        //SMS_Encode_Type_t encodeType = event->param1;
         uint32_t contentLength = event->param2;
-        const char * header = event->pParam1;
-        const char * content = event->pParam2;
+        const char * header = (const char *)event->pParam1;
+        const char * content = (const char *)event->pParam2;
 
         mp_obj_t data[] = {
             mp_obj_new_str(header, strlen(header)),
@@ -560,7 +560,7 @@ STATIC mp_obj_t modcellular_sms_list(size_t n_args, const mp_obj_t *args) {
 
     mp_int_t timeout = TIMEOUT_SMS_LIST;
 
-    if (n_args == 2)
+    if (n_args == 1)
         timeout = mp_obj_get_int(args[1]);
 
     SMS_Storage_Info_t storage;
@@ -584,7 +584,7 @@ STATIC mp_obj_t modcellular_sms_list(size_t n_args, const mp_obj_t *args) {
     return (mp_obj_t)result;
 }
 
-STATIC MP_DEFINE_CONST_FUN_OBJ_0(modcellular_sms_list_obj, modcellular_sms_list);
+STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(modcellular_sms_list_obj, 0, 1, modcellular_sms_list);
 STATIC MP_DEFINE_CONST_STATICMETHOD_OBJ(modcellular_sms_list_static_class_obj, MP_ROM_PTR(&modcellular_sms_list_obj));
 
 STATIC mp_obj_t modcellular_sms_get_storage_size(void) {
