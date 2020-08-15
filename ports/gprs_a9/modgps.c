@@ -128,7 +128,7 @@ STATIC mp_obj_t modgps_on(size_t n_args, const mp_obj_t *arg) {
     return mp_const_none;
 }
 
-STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(modgps_on_obj, 0, 1, modgps_on);
+STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(modgps_on_obj, 0, 2, modgps_on);
 
 STATIC mp_obj_t modgps_off(void) {
     // ========================================

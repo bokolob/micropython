@@ -329,22 +329,31 @@ void modcellular_notify_sms_receipt(API_Event_t* event) {
     }
 
     if (new_sms_callback && new_sms_callback != mp_const_none) {
-        //SMS_Encode_Type_t encodeType = event->param1;
-        uint32_t contentLength = event->param2;
+        SMS_Encode_Type_t encodeType = event->param1;
+        uint32_t content_length = event->param2;
         uint8_t* header = event->pParam1;
         uint8_t* content = event->pParam2;
 
         uint8_t* gbk = NULL;
         uint32_t gbkLen = 0;
-
-        if (!SMS_Unicode2LocalLanguage(content,contentLength,CHARSET_UTF_8,&gbk,&gbkLen)) {
-             mp_raise_ValueError("Failed to convert sms to Unicode");
+        
+        if (encodeType == SMS_ENCODE_TYPE_UNICODE) {
+            if (!SMS_Unicode2LocalLanguage(content,content_length,CHARSET_UTF_8,&gbk,&gbkLen)) {
+                 mp_raise_ValueError("Failed to convert sms to Unicode");
+            }
+        }
+        else {
+            gbk = content;
+            gbkLen = content_length;
         }
 
 //     '"+79169542243",,"2020/08/11,23:25:26+03",145,17,0,2,"+79168960438",145,12\r\n', '\u041f\u0440\u0438\u0432\u0435\u0442'
 
         mp_obj_t sms = modcellular_sms_from_raw(header, strlen(header), gbk, gbkLen);
-        OS_Free(gbk);
+
+        if (encodeType == SMS_ENCODE_TYPE_UNICODE) {
+            OS_Free(gbk);
+        }
 
         mp_sched_schedule(new_sms_callback, sms);
     }
