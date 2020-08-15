@@ -120,7 +120,7 @@ STATIC mp_obj_t modgps_on(size_t n_args, const mp_obj_t *arg) {
     GPS_Init();
     GPS_Open(NULL);
 
-    GPS_SetSearchMode(!!(search_mode & USE_GPS), !!(search_mode & USE_GPS),
+    GPS_SetSearchMode(!!(search_mode & USE_GPS), !!(search_mode & USE_GLONASS),
                      !!(search_mode & USE_BEIDOU), !!(search_mode & USE_GALILEO));
 
     WAIT_UNTIL(gpsInfo->rmc.latitude.value, timeout, 100, mp_raise_OSError(MP_ETIMEDOUT));
