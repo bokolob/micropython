@@ -331,16 +331,22 @@ void modcellular_notify_sms_receipt(API_Event_t* event) {
     if (new_sms_callback && new_sms_callback != mp_const_none) {
         //SMS_Encode_Type_t encodeType = event->param1;
         uint32_t contentLength = event->param2;
-        const char * header = (const char *)event->pParam1;
-        const char * content = (const char *)event->pParam2;
+        uint8_t* header = event->pParam1;
+        uint8_t* content = event->pParam2;
 
-        mp_obj_t data[] = {
-            mp_obj_new_str(header, strlen(header)),
-            mp_obj_new_str(content, contentLength),
-        };
+        uint8_t* gbk = NULL;
+        uint32_t gbkLen = 0;
 
-        mp_obj_t this_heap = mp_obj_new_tuple(2, data);
-        mp_sched_schedule(new_sms_callback, this_heap);
+        if (!SMS_Unicode2LocalLanguage(content,contentLength,CHARSET_UTF_8,&gbk,&gbkLen)) {
+             mp_raise_ValueError("Failed to convert sms to Unicode");
+        }
+
+//     '"+79169542243",,"2020/08/11,23:25:26+03",145,17,0,2,"+79168960438",145,12\r\n', '\u041f\u0440\u0438\u0432\u0435\u0442'
+
+        mp_obj_t sms = modcellular_sms_from_raw(header, strlen(header), gbk, gbkLen);
+        OS_Free(gbk);
+
+        mp_sched_schedule(new_sms_callback, sms);
     }
 }
 
@@ -1346,7 +1352,7 @@ STATIC const mp_map_elem_t mp_module_cellular_globals_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR_reset), (mp_obj_t)&modcellular_reset_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_on_status_event), (mp_obj_t)&modcellular_on_status_event_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_on_sms), (mp_obj_t)&modcellular_on_sms_obj },
-    { MP_OBJ_NEW_QSTR(MP_QSTR_on_sms), (mp_obj_t)&modcellular_on_new_sms_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_on_new_sms), (mp_obj_t)&modcellular_on_new_sms_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_on_call), (mp_obj_t)&modcellular_on_call_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_on_ussd), (mp_obj_t)&modcellular_on_ussd_obj },
 
@@ -1368,6 +1374,7 @@ STATIC const mp_map_elem_t mp_module_cellular_globals_table[] = {
     
     { MP_ROM_QSTR(MP_QSTR_SMS_SENT), MP_ROM_INT(SMS_SENT) },
     { MP_ROM_QSTR(MP_QSTR_SMS_RECEIVED), MP_ROM_INT(SMS_RECEIVED) },
+    { MP_ROM_QSTR(MP_QSTR_SMS_LIST), MP_ROM_INT(SMS_LIST) },
 
     { MP_ROM_QSTR(MP_QSTR_ENOSIM), MP_ROM_INT(NTW_EXC_NOSIM) },
     { MP_ROM_QSTR(MP_QSTR_EREGD), MP_ROM_INT(NTW_EXC_REG_DENIED) },
