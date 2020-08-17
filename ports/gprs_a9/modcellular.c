@@ -320,10 +320,10 @@ void modcellular_notify_sms_list(API_Event_t* event) {
     OS_LockMutex(sms_list_mutex);
 
     if (sms_list_buffer == NULL) {
-        sms_list_buffer = mp_obj_new_list(storage.used, NULL);
+        sms_list_buffer = mp_obj_new_list(1, NULL);
     }
 
-    list_insert(sms_list_buffer, sms_list_buffer->len, sms);
+    mp_obj_list_append(sms_list_buffer, sms);
 
     OS_UnlockMutex(sms_list_mutex);
 }
@@ -579,6 +579,20 @@ STATIC mp_obj_t modcellular_sms_withdraw(mp_obj_t self_in) {
 }
 
 MP_DEFINE_CONST_FUN_OBJ_1(modcellular_sms_withdraw_obj, &modcellular_sms_withdraw);
+
+STATIC mp_obj_t get_loaded_sms_list() {
+
+    OS_LockMutex(sms_list_mutex);
+    mp_obj_list_t *current = sms_list_buffer;
+    sms_list_buffer = NULL;
+    OS_UnlockMutex(sms_list_mutex);
+
+    return current == NULL ? mp_const_none : current;
+}
+
+STATIC MP_DEFINE_CONST_FUN_OBJ_0(modcellular_sms_loaded_list_obj, get_loaded_sms_list);
+STATIC MP_DEFINE_CONST_STATICMETHOD_OBJ(modcellular_sms_loaded_list_static_class_obj, MP_ROM_PTR(&modcellular_sms_loaded_list_obj));
+
 
 STATIC mp_obj_t modcellular_sms_list(size_t n_args, const mp_obj_t *args) {
     // ========================================
