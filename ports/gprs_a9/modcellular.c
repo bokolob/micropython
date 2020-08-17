@@ -109,6 +109,8 @@ mp_obj_t ussd_response = mp_const_none;
 
 // A buffer used for listing messages
 mp_obj_list_t *sms_list_buffer = NULL;
+HANDLE sms_list_mutex = NULL;
+
 uint8_t sms_list_buffer_count = 0;
 
 // SMS received
@@ -154,6 +156,10 @@ void modcellular_init0(void) {
     sms_callback = mp_const_none;
     call_callback = mp_const_none;
     ussd_callback = mp_const_none;
+    
+    if (sms_list_mutex == NULL) {
+         sms_list_mutex = OS_CreateMutex();
+    }
 
     // Reset statuses
     network_exception = NTW_NO_EXC;
@@ -219,9 +225,13 @@ NORETURN void mp_raise_RuntimeError(const char *msg) {
 // ------
 
 void modcellular_network_status_update(uint8_t new_status, uint16_t new_exception) {
-    if (new_exception) network_exception = new_exception;
+    if (new_exception) 
+        network_exception = new_exception;
+
     network_status = new_status;
-    if (network_status_callback && network_status_callback != mp_const_none) mp_sched_schedule(network_status_callback, mp_obj_new_int(network_status));
+
+    if (network_status_callback && network_status_callback != mp_const_none) 
+        mp_sched_schedule(network_status_callback, mp_obj_new_int(network_status));
 }
 
 void modcellular_notify_no_sim(API_Event_t* event) {
@@ -296,21 +306,26 @@ void modcellular_notify_ntwlist(API_Event_t* event) {
 
 // SMS
 
+
+
 void modcellular_notify_sms_list(API_Event_t* event) {
     SMS_Message_Info_t* messageInfo = (SMS_Message_Info_t*)event->pParam1;
 
     mp_obj_t sms = modcellular_sms_from_record(messageInfo);
+    OS_Free(messageInfo->data);
 
     if (sms_callback && sms_callback != mp_const_none)
         mp_sched_schedule(sms_callback, mp_obj_new_int(SMS_LIST));
 
-    if (sms_list_buffer && (sms_list_buffer->len > sms_list_buffer_count)) {
-        sms_list_buffer->items[sms_list_buffer_count] = sms;
-        sms_list_buffer_count ++;
-    } else {
-        network_exception = NTW_EXC_SMS_DROP;
+    OS_LockMutex(sms_list_mutex);
+
+    if (sms_list_buffer == NULL) {
+        sms_list_buffer = mp_obj_new_list(storage.used, NULL);
     }
-    OS_Free(messageInfo->data);
+
+    list_insert(sms_list_buffer, sms_list_buffer->len, sms);
+
+    OS_UnlockMutex(sms_list_mutex);
 }
 
 void modcellular_notify_sms_sent(API_Event_t* event) {
@@ -576,27 +591,21 @@ STATIC mp_obj_t modcellular_sms_list(size_t n_args, const mp_obj_t *args) {
     mp_int_t timeout = TIMEOUT_SMS_LIST;
 
     if (n_args == 1)
-        timeout = mp_obj_get_int(args[1]);
+        timeout = mp_obj_get_int(args[0]);
 
     SMS_Storage_Info_t storage;
     SMS_GetStorageInfo(&storage, SMS_STORAGE_SIM_CARD);
-    
-    sms_list_buffer = mp_obj_new_list(storage.used, NULL);
-    sms_list_buffer_count = 0;
+
+    mp_obj_t list = get_loaded_sms_list();
+
+    if (list != NULL) {
+        m_del_obj(list, list);
+    }
 
     SMS_ListMessageRequst(SMS_STATUS_ALL, SMS_STORAGE_SIM_CARD);
-    WAIT_UNTIL(sms_list_buffer_count == storage.used, timeout, 100, mp_warning(NULL, "Failed to poll all SMS: the list may be incomplete"));
+    WAIT_UNTIL(sms_list_buffer->len == storage.used, timeout, 100, mp_warning(NULL, "Failed to poll all SMS: the list may be incomplete"));
 
-    mp_obj_list_t *result = sms_list_buffer;
-    sms_list_buffer = NULL;
-    
-    uint16_t i;
-    for (i = sms_list_buffer_count; i < result->len; i++) {
-        result->items[i] = mp_const_none;
-    }
-    sms_list_buffer_count = 0;
-
-    return (mp_obj_t)result;
+    return (mp_obj_t)get_loaded_sms_list();
 }
 
 STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(modcellular_sms_list_obj, 0, 1, modcellular_sms_list);
@@ -621,6 +630,19 @@ STATIC mp_obj_t modcellular_sms_get_storage_size(void) {
 
 STATIC MP_DEFINE_CONST_FUN_OBJ_0(modcellular_sms_get_storage_size_obj, modcellular_sms_get_storage_size);
 STATIC MP_DEFINE_CONST_STATICMETHOD_OBJ(modcellular_sms_get_storage_size_static_class_obj, MP_ROM_PTR(&modcellular_sms_get_storage_size_obj));
+
+STATIC mp_obj_t get_loaded_sms_list() {
+
+    OS_LockMutex(sms_list_mutex);
+    mp_obj_list_t current = sms_list_buffer;
+    sms_list_buffer = NULL;
+    OS_UnlockMutex(sms_list_buffer);
+
+    return current == NULL ? mp_const_none : current;
+}
+
+STATIC MP_DEFINE_CONST_FUN_OBJ_0(modcellular_sms_loaded_list_obj, get_loaded_sms_list);
+STATIC MP_DEFINE_CONST_STATICMETHOD_OBJ(modcellular_sms_loaded_list_static_class_obj, MP_ROM_PTR(&modcellular_sms_loaded_list_obj));
 
 STATIC void modcellular_sms_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
     // ========================================
@@ -683,6 +705,8 @@ STATIC const mp_rom_map_elem_t sms_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_send), MP_ROM_PTR(&modcellular_sms_send_obj) },
     { MP_ROM_QSTR(MP_QSTR_withdraw), MP_ROM_PTR(&modcellular_sms_withdraw_obj) },
     { MP_ROM_QSTR(MP_QSTR_list), MP_ROM_PTR(&modcellular_sms_list_static_class_obj) },
+    { MP_ROM_QSTR(MP_QSTR_loaded_list), MP_ROM_PTR(&modcellular_sms_loaded_list_static_class_obj) },
+    { MP_ROM_QSTR(MP_QSTR_storage_size), MP_ROM_PTR(&modcellular_sms_storage_size_static_class_obj) },
 };
 
 STATIC MP_DEFINE_CONST_DICT(sms_locals_dict, sms_locals_dict_table);
