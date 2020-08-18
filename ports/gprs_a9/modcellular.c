@@ -320,7 +320,7 @@ void modcellular_notify_sms_list(API_Event_t* event) {
     OS_LockMutex(sms_list_mutex);
 
     if (sms_list_buffer == NULL) {
-        sms_list_buffer = mp_obj_new_list(1, NULL);
+        sms_list_buffer = mp_obj_new_list(0, NULL);
     }
 
     mp_obj_list_append(sms_list_buffer, sms);
@@ -593,6 +593,25 @@ STATIC mp_obj_t get_loaded_sms_list() {
 STATIC MP_DEFINE_CONST_FUN_OBJ_0(modcellular_sms_loaded_list_obj, get_loaded_sms_list);
 STATIC MP_DEFINE_CONST_STATICMETHOD_OBJ(modcellular_sms_loaded_list_static_class_obj, MP_ROM_PTR(&modcellular_sms_loaded_list_obj));
 
+STATIC mp_obj_t delete_sms_by_index(mp_obj_t index) {
+
+    mp_int_t int_index = mp_obj_get_int(index);
+
+    if (!int_index) {
+        mp_raise_ValueError("Cannot delete SMS with zero index");
+        return mp_const_none;
+    }
+
+    if (!SMS_DeleteMessage(int_index, SMS_STATUS_ALL, SMS_STORAGE_SIM_CARD)) {
+        mp_raise_ValueError("Failed to delete SMS");
+        return mp_const_none;
+    }
+
+    return mp_const_none;
+}
+
+STATIC MP_DEFINE_CONST_FUN_OBJ_1(modcellular_delete_sms_by_index_obj, delete_sms_by_index);
+STATIC MP_DEFINE_CONST_STATICMETHOD_OBJ(modcellular_delete_sms_by_index_static_class_obj, MP_ROM_PTR(&modcellular_delete_sms_by_index_obj));
 
 STATIC mp_obj_t modcellular_sms_list(size_t n_args, const mp_obj_t *args) {
     // ========================================
@@ -612,12 +631,12 @@ STATIC mp_obj_t modcellular_sms_list(size_t n_args, const mp_obj_t *args) {
 
     mp_obj_t list = get_loaded_sms_list();
 
-    if (list != NULL) {
+    if (list != mp_const_none) {
         m_del_obj(list, list);
     }
 
     SMS_ListMessageRequst(SMS_STATUS_ALL, SMS_STORAGE_SIM_CARD);
-    WAIT_UNTIL(sms_list_buffer->len == storage.used, timeout, 100, mp_warning(NULL, "Failed to poll all SMS: the list may be incomplete"));
+    WAIT_UNTIL(sms_list_buffer != NULL && sms_list_buffer->len == storage.used, timeout, 100, mp_warning(NULL, "Failed to poll all SMS: the list may be incomplete"));
 
     return (mp_obj_t)get_loaded_sms_list();
 }
@@ -720,6 +739,7 @@ STATIC const mp_rom_map_elem_t sms_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_withdraw), MP_ROM_PTR(&modcellular_sms_withdraw_obj) },
     { MP_ROM_QSTR(MP_QSTR_list), MP_ROM_PTR(&modcellular_sms_list_static_class_obj) },
     { MP_ROM_QSTR(MP_QSTR_loaded_list), MP_ROM_PTR(&modcellular_sms_loaded_list_static_class_obj) },
+    { MP_ROM_QSTR(MP_QSTR_delete_sms_by_index), MP_ROM_PTR(&modcellular_delete_sms_by_index_static_class_obj) },
     { MP_ROM_QSTR(MP_QSTR_storage_size), MP_ROM_PTR(&modcellular_sms_storage_size_static_class_obj) },
 };
 
