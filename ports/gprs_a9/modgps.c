@@ -81,6 +81,19 @@ STATIC mp_obj_t modgps_on_update(mp_obj_t callable) {
 
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(modgps_on_update_obj, modgps_on_update);
 
+STATIC mp_obj_t modgps_on_update(mp_obj_t callable) {
+    // ========================================
+    // Sets a callback on GPS update.
+    // Args:
+    //     callback (Callable): a callback to
+    //     execute on GPS data received from UART.
+    // ========================================
+    gps_callback = callable;
+    return mp_const_none;
+}
+
+STATIC MP_DEFINE_CONST_FUN_OBJ_1(modgps_on_update_obj, modgps_on_update);
+
 // -------
 // Methods
 // -------
@@ -402,6 +415,7 @@ STATIC const mp_map_elem_t mp_module_gps_globals_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR_get_last_location), (mp_obj_t)&modgps_get_last_location_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_get_satellites), (mp_obj_t)&modgps_get_satellites_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_time), (mp_obj_t)&modgps_time_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_on_update), (mp_obj_t)&modgps_on_update},
     { MP_OBJ_NEW_QSTR(MP_QSTR_nmea_data), (mp_obj_t)&modgps_nmea_data_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_on_update), (mp_obj_t)&modgps_on_update},
 };
